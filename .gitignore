@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Environment files (contain secrets)
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+
+# Prisma
+.prisma/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Docker volumes (local data)
+postgres_data/
+ollama_data/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Package manager locks (keep package-lock.json)
+yarn.lock
+pnpm-lock.yaml

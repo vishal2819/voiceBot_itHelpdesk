@@ -1,0 +1,75 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ServiceCatalog {
+  id          String   @id @default(cuid())
+  issueType   String   @unique @db.VarChar(100)
+  description String   @db.Text
+  price       Decimal  @db.Decimal(10, 2)
+  keywords    String[] // For deterministic classification
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([issueType])
+  @@map("service_catalog")
+}
+
+model Ticket {
+  id        String        @id @default(cuid())
+  ticketNumber String     @unique @default(cuid()) @map("ticket_number") @db.VarChar(50)
+  name      String        @db.VarChar(255)
+  email     String        @db.VarChar(255)
+  phone     String        @db.VarChar(50)
+  address   String        @db.Text
+  issue     String        @db.Text
+  issueType String?       @map("issue_type") @db.VarChar(100)
+  price     Decimal       @db.Decimal(10, 2)
+  status    TicketStatus  @default(CREATED)
+  version   Int           @default(1) // For optimistic locking
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+  
+  conversationLogs ConversationLog[]
+
+  @@index([email])
+  @@index([status])
+  @@index([createdAt])
+  @@index([ticketNumber])
+  @@map("tickets")
+}
+
+enum TicketStatus {
+  CREATED
+  IN_PROGRESS
+  RESOLVED
+  CANCELLED
+}
+
+model ConversationLog {
+  id            String   @id @default(cuid())
+  ticketId      String?  @map("ticket_id")
+  sessionId     String   @map("session_id") @db.VarChar(255)
+  conversationState String @map("conversation_state") @db.VarChar(50)
+  userMessage   String?  @map("user_message") @db.Text
+  botResponse   String?  @map("bot_response") @db.Text
+  toolCalls     Json?    @map("tool_calls") // Store tool invocations
+  metadata      Json?    // Store additional context (latency, audio quality, etc.)
+  timestamp     DateTime @default(now())
+  
+  ticket Ticket? @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([sessionId])
+  @@index([timestamp])
+  @@map("conversation_logs")
+}

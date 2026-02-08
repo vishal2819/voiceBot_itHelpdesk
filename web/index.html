@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>IT Help Desk Voice Bot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/livekit-client@2.17.1/dist/livekit-client.umd.js"></script>
+  </head>
+  <body class="bg-gray-50">
+    <div class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div class="max-w-2xl w-full space-y-8">
+        <!-- Header -->
+        <div class="text-center">
+          <h1 class="text-4xl font-bold text-gray-900">IT Help Desk Voice Bot</h1>
+          <p class="mt-2 text-gray-600">Get instant IT support via voice conversation</p>
+        </div>
+
+        <!-- Connection Status -->
+        <div
+          id="status"
+          class="bg-white shadow-md rounded-lg p-6 border-l-4"
+          style="border-color: #3b82f6"
+        >
+          <div class="flex items-center">
+            <div id="statusIndicator" class="w-3 h-3 rounded-full mr-3 bg-gray-400"></div>
+            <span id="statusText" class="text-gray-700">Not Connected</span>
+          </div>
+        </div>
+
+        <!-- Call Controls -->
+        <div class="bg-white shadow-md rounded-lg p-6">
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Your Name</label>
+              <input
+                type="text"
+                id="participantName"
+                placeholder="Enter your name"
+                class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                value="Guest User"
+              />
+            </div>
+
+            <button
+              id="startBtn"
+              class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+              Start Call
+            </button>
+
+            <button
+              id="endBtn"
+              disabled
+              class="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+            >
+              End Call
+            </button>
+          </div>
+        </div>
+
+        <!-- Conversation Transcript -->
+        <div class="bg-white shadow-md rounded-lg p-6">
+          <h2 class="text-xl font-semibold mb-4 text-gray-900">Conversation Transcript</h2>
+          <div id="transcript" class="space-y-3 max-h-96 overflow-y-auto">
+            <p class="text-gray-500 italic">
+              Conversation will appear here once you start the call...
+            </p>
+          </div>
+        </div>
+
+        <!-- Ticket Confirmation -->
+        <div
+          id="ticketConfirmation"
+          class="hidden bg-green-50 shadow-md rounded-lg p-6 border-l-4 border-green-500"
+        >
+          <h2 class="text-xl font-semibold mb-2 text-green-900">✓ Ticket Created Successfully!</h2>
+          <div id="ticketDetails" class="text-gray-700"></div>
+        </div>
+
+        <!-- Service Info -->
+        <div class="bg-white shadow-md rounded-lg p-6">
+          <h3 class="text-lg font-semibold mb-3 text-gray-900">Available Services</h3>
+          <div class="grid grid-cols-2 gap-4 text-sm">
+            <div class="flex items-center">
+              <span class="text-2xl mr-2">📶</span>
+              <div>
+                <p class="font-medium">Wi-Fi Issues</p>
+                <p class="text-gray-600">$20</p>
+              </div>
+            </div>
+            <div class="flex items-center">
+              <span class="text-2xl mr-2">📧</span>
+              <div>
+                <p class="font-medium">Email Login</p>
+                <p class="text-gray-600">$15</p>
+              </div>
+            </div>
+            <div class="flex items-center">
+              <span class="text-2xl mr-2">💻</span>
+              <div>
+                <p class="font-medium">Slow Laptop</p>
+                <p class="text-gray-600">$25</p>
+              </div>
+            </div>
+            <div class="flex items-center">
+              <span class="text-2xl mr-2">🖨️</span>
+              <div>
+                <p class="font-medium">Printer Problems</p>
+                <p class="text-gray-600">$10</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="./client.js"></script>
+  </body>
+</html>

@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: voicebot_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: voicebot
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Server (Backend)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: voicebot_api
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/voicebot?schema=public
+      NODE_TLS_REJECT_UNAUTHORIZED: '0'
+    ports:
+      - '3001:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >-
+      sh -c "npx prisma migrate deploy && npx prisma db seed && node dist/index.js"
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: voicebot_ollama
+    ports:
+      - '11434:11434'
+    volumes:
+      - ollama_data:/root/.ollama
+
+  whispercpp:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    container_name: voicebot_whisper
+    ports:
+      - '8080:9000'
+    environment:
+      ASR_MODEL: base
+      ASR_ENGINE: openai_whisper
+
+  piper:
+    image: linuxserver/piper:2.2.2-gpu
+    container_name: voicebot_piper
+    ports:
+      - '5002:5002'
+
+volumes:
+  postgres_data:
+  ollama_data:
