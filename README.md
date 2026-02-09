@@ -2,6 +2,10 @@
 
 Production-ready LiveKit voice bot for IT help desk support. Built with TypeScript (strict), LiveKit RTC, and PostgreSQL via Prisma.
 
+## Demo
+
+🎥 **[Watch Demo](https://www.loom.com/share/144ef0b255674f3d9547ad0892a578bd)** - See the voice bot in action!
+
 ## Features
 
 - **Voice Conversation Flow**: Natural voice interaction using LiveKit RTC

@@ -3,6 +3,7 @@
 ## 📋 Overview
 
 Your project has been modernized with:
+
 - ✅ Next.js 15 + React 19 frontend
 - ✅ @livekit/components-react integration
 - ✅ Microservices architecture (API, Frontend, Agent)
@@ -44,6 +45,7 @@ cd ..
 ### Step 3: Create Environment Files
 
 **frontend/.env.local** (create this file):
+
 ```env
 LIVEKIT_URL=wss://ithelpdeskvoicebot-zzcw9hbw.livekit.cloud
 LIVEKIT_API_KEY=your_api_key_here
@@ -56,6 +58,7 @@ Copy your existing `.env` values to the frontend.
 ### Step 4: Start Services
 
 **Option A: Docker (Recommended)**
+
 ```powershell
 docker compose down  # Stop old containers
 docker compose up -d --build  # Start new architecture
@@ -64,17 +67,20 @@ docker compose up -d --build  # Start new architecture
 **Option B: Local Development (3 terminals)**
 
 Terminal 1 - API Server:
+
 ```powershell
 npm run dev
 ```
 
 Terminal 2 - Frontend:
+
 ```powershell
 cd frontend
 npm run dev
 ```
 
 Terminal 3 - Agent (Optional for now):
+
 ```powershell
 cd agent-service
 npm run dev
@@ -82,31 +88,34 @@ npm run dev
 
 ### Step 5: Access the Application
 
-- **NEW Frontend**: http://localhost:3002
+- **NEW Frontend**: <http://localhost:3002>
 - **Old Frontend**: Still available at old location for reference
-- **API Health**: http://localhost:3001/health
+- **API Health**: <http://localhost:3001/health>
 
 ## 🎯 What Changed?
 
 ### Frontend (Port 3002)
+
 - Modern React components
 - Real-time state visualization
 - Improved error handling
 - Better UX with loading states
 
 ### Backend (Port 3001)
+
 - Simplified to API-only server
 - No longer manages agents directly
 - Returns serverUrl in token response
 
 ### Agent Service
+
 - Runs independently
 - Can be scaled separately
 - Better lifecycle management
 
 ## 🔧 Testing the New Setup
 
-1. **Open http://localhost:3002**
+1. **Open <http://localhost:3002>**
 2. Enter your name
 3. Click "Start Voice Call"
 4. Verify microphone access
@@ -131,6 +140,7 @@ docker compose ps
 ## 🐛 Troubleshooting
 
 ### Frontend not loading
+
 ```powershell
 cd frontend
 npm install
@@ -138,20 +148,25 @@ npm run dev
 ```
 
 ### API token errors
+
 Check that `.env` has correct LiveKit credentials:
+
 ```powershell
 # In root directory
 Get-Content .env | Select-String LIVEKIT
 ```
 
 ### Agent not connecting
+
 ```powershell
 docker compose logs agent
 # Check for connection errors
 ```
 
 ### Port conflicts
+
 If ports are in use:
+
 ```powershell
 # Check what's using port 3002
 netstat -ano | findstr :3002
@@ -162,18 +177,23 @@ netstat -ano | findstr :3002
 ## 🎨 Customization
 
 ### Update Branding
+
 Edit `frontend/components/VoiceBotApp.tsx`:
+
 - Change title: "IT Help Desk Voice Bot"
 - Update services displayed
 - Modify color scheme in Tailwind classes
 
 ### Update Services
+
 Edit `frontend/components/VoiceBotApp.tsx` ServiceItem components:
+
 ```typescript
 <ServiceItem icon="📶" name="Wi-Fi Issues" price="$20" />
 ```
 
 ### Change Ports
+
 - Frontend: `frontend/package.json` → `"dev": "next dev -p 3002"`
 - API: `src/config/env.ts` → `PORT: z.coerce.number().default(3000)`
 
@@ -197,18 +217,21 @@ Edit `frontend/components/VoiceBotApp.tsx` ServiceItem components:
 ## 💡 Key Improvements
 
 ### Developer Experience
+
 - Hot reload for frontend changes
 - Separate services for parallel development
 - Better error messages
 - TypeScript throughout
 
 ### User Experience
+
 - Modern UI with Tailwind CSS
 - Real-time visual feedback
 - Smoother transitions
 - Better error handling
 
 ### Production Ready
+
 - Docker multi-stage builds
 - Separate scalable services
 - Health checks
@@ -253,8 +276,8 @@ cd agent-service && npm install  # Agent
 
 ## ✅ Verification Checklist
 
-- [ ] Frontend opens at http://localhost:3002
-- [ ] API health check works at http://localhost:3001/health
+- [ ] Frontend opens at <http://localhost:3002>
+- [ ] API health check works at <http://localhost:3001/health>
 - [ ] Can enter name and start call
 - [ ] Microphone permission granted
 - [ ] Voice conversation works
