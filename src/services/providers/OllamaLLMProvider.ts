@@ -6,7 +6,7 @@ type OllamaToolCall = {
   type?: string;
   function?: {
     name?: string;
-    arguments?: string;
+    arguments?: Record<string, unknown> | string;
   };
 };
 
@@ -93,14 +93,21 @@ export class OllamaLLMProvider implements LLMProvider {
 
   private normalizeToolCalls(toolCalls: OllamaToolCall[]): ToolCall[] {
     return toolCalls
-      .map((call, index) => ({
-        id: call.id ?? `ollama-tool-${index}`,
-        type: 'function' as const,
-        function: {
-          name: call.function?.name ?? 'unknown',
-          arguments: call.function?.arguments ?? '{}',
-        },
-      }))
+      .map((call, index) => {
+        let args = call.function?.arguments ?? '{}';
+        if (typeof args !== 'string') {
+            args = JSON.stringify(args);
+        }
+        
+        return {
+            id: call.id ?? `ollama-tool-${index}`,
+            type: 'function' as const,
+            function: {
+            name: call.function?.name ?? 'unknown',
+            arguments: args,
+            },
+        };
+      })
       .filter((call) => call.function.name !== 'unknown');
   }
 }

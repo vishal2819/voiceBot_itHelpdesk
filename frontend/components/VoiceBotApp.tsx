@@ -5,7 +5,6 @@ import dynamic from 'next/dynamic';
 import {
   LiveKitRoom,
   RoomAudioRenderer,
-  useVoiceAssistant,
   BarVisualizer,
   DisconnectButton,
   useRoomContext,
@@ -116,7 +115,7 @@ export function VoiceBotApp() {
               IT Help Desk Voice Bot
             </h1>
             <p className="text-gray-600 dark:text-gray-400 text-lg">
-              Speak naturally - I'll help create your support ticket
+              Speak naturally - I&apos;ll help create your support ticket
             </p>
             <div className="flex items-center justify-center space-x-2 text-sm text-gray-500">
               <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse" />
@@ -164,7 +163,7 @@ export function VoiceBotApp() {
             <div className="pt-4 border-t-2 border-gray-200 dark:border-gray-700">
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center">
                 <span className="mr-2">⚡</span>
-                What You'll Experience
+                What You&apos;ll Experience
               </h3>
               <div className="space-y-2 text-xs text-gray-600 dark:text-gray-400">
                 <div className="flex items-center space-x-2">
@@ -216,13 +215,14 @@ function ServiceItem({ icon, name, price }: { icon: string; name: string; price:
 }
 
 function VoiceBotSession({ participantName }: { participantName: string }) {
-  const { state, audioTrack } = useVoiceAssistant();
   const room = useRoomContext();
   const { localParticipant } = useLocalParticipant();
   const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
   const animationFrameRef = useRef<number | undefined>(undefined);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     // Add initial greeting
@@ -234,35 +234,61 @@ function VoiceBotSession({ participantName }: { participantName: string }) {
     ]);
   }, [participantName]);
 
-  // Monitor local audio for speech detection
+  // Handle incoming TTS audio data messages
   useEffect(() => {
-    if (!localParticipant) return;
+    if (!room) return;
 
-    const checkAudioLevel = () => {
-      const tracks = localParticipant.audioTrackPublications;
-      let maxLevel = 0;
+    const handleDataReceived = (payload: Uint8Array, participant: any, kind: any) => {
+      // Only process TTS audio data
+      if (kind?.topic !== 'tts-audio') return;
 
-      tracks.forEach((publication) => {
-        if (publication.track && publication.track.mediaStreamTrack) {
-          // This is a simplified version - in production you'd use AudioContext
-          maxLevel = Math.max(maxLevel, publication.isMuted ? 0 : 0.5);
+      try {
+        // Convert the audio data to a blob and play it
+        const audioBlob = new Blob([new Uint8Array(payload)], { type: 'audio/wav' });
+        const audioUrl = URL.createObjectURL(audioBlob);
+
+        if (audioRef.current) {
+          audioRef.current.src = audioUrl;
+          // Play audio and clean up the URL after playing
+          audioRef.current.play().then(() => {
+            // Clean up the object URL after a delay to ensure it played
+            setTimeout(() => URL.revokeObjectURL(audioUrl), 1000);
+          }).catch(err => {
+            console.error('Failed to play TTS audio:', err);
+            URL.revokeObjectURL(audioUrl); // Clean up on error too
+          });
         }
-      });
-
-      setAudioLevel(maxLevel);
-      setIsSpeaking(maxLevel > 0.1);
-
-      animationFrameRef.current = requestAnimationFrame(checkAudioLevel);
-    };
-
-    checkAudioLevel();
-
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
+      } catch (error) {
+        console.error('Error handling TTS audio data:', error);
       }
     };
-  }, [localParticipant]);
+
+    room.on('dataReceived', handleDataReceived);
+
+    return () => {
+      room.off('dataReceived', handleDataReceived);
+    };
+  }, [room]);
+
+  // Monitor room connection state
+  useEffect(() => {
+    if (!room) return;
+
+    const handleConnected = () => setConnectionState('connected');
+    const handleDisconnected = () => setConnectionState('disconnected');
+
+    room.on('connected', handleConnected);
+    room.on('disconnected', handleDisconnected);
+
+    if (room.state === 'connected') {
+      setConnectionState('connected');
+    }
+
+    return () => {
+      room.off('connected', handleConnected);
+      room.off('disconnected', handleDisconnected);
+    };
+  }, [room]);
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-purple-900 dark:to-gray-800">
@@ -270,12 +296,10 @@ function VoiceBotSession({ participantName }: { participantName: string }) {
       <div className="relative bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg shadow-lg p-4 flex justify-between items-center border-b-2 border-gradient-to-r from-blue-500 to-purple-500">
         <div className="flex items-center space-x-4">
           <div className="relative">
-            <div className={`w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center ${
-              state === 'speaking' ? 'animate-pulse' : ''
-            }`}>
+            <div className={`w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center ${isSpeaking ? 'animate-pulse' : ''}`}>
               <span className="text-2xl">🤖</span>
             </div>
-            {state === 'listening' && (
+            {isSpeaking && (
               <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-ping" />
             )}
           </div>
@@ -284,20 +308,15 @@ function VoiceBotSession({ participantName }: { participantName: string }) {
             <div className="flex items-center space-x-2 mt-1">
               <div
                 className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                  state === 'listening'
+                  isSpeaking
                     ? 'bg-green-500 animate-pulse'
-                    : state === 'thinking'
-                      ? 'bg-yellow-500 animate-bounce'
-                      : state === 'speaking'
-                        ? 'bg-blue-500 animate-pulse'
-                        : 'bg-gray-400'
+                    : connectionState === 'connected'
+                      ? 'bg-blue-500'
+                      : 'bg-gray-400'
                 }`}
               />
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300 capitalize">
-                {state === 'listening' && '🎤 Listening...'}
-                {state === 'thinking' && '🧠 Processing...'}
-                {state === 'speaking' && '💬 Speaking...'}
-                {state === 'idle' && '✨ Ready'}
+                {isSpeaking ? '🎤 Listening...' : connectionState === 'connected' ? '✨ Ready' : '🔄 Connecting...'}
               </span>
             </div>
           </div>
@@ -313,7 +332,7 @@ function VoiceBotSession({ participantName }: { participantName: string }) {
         <div className="lg:w-1/3 flex items-center justify-center">
           <div className="relative bg-white/90 dark:bg-gray-800/90 backdrop-blur-lg rounded-2xl shadow-2xl p-8 w-full max-w-sm border border-gray-200 dark:border-gray-700">
             {/* Voice Input Detection Indicator */}
-            {isSpeaking && state === 'listening' && (
+            {isSpeaking && (
               <div className="absolute top-4 right-4 flex items-center space-x-2 bg-green-500/20 px-3 py-1 rounded-full border border-green-500">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-ping" />
                 <span className="text-xs font-semibold text-green-700 dark:text-green-300">Voice Detected</span>
@@ -325,36 +344,26 @@ function VoiceBotSession({ participantName }: { participantName: string }) {
               <div className="relative">
                 <div
                   className={`w-40 h-40 rounded-full flex items-center justify-center transition-all duration-300 ${
-                    state === 'listening'
+                    isSpeaking
                       ? 'bg-gradient-to-br from-green-400 to-emerald-600 shadow-2xl shadow-green-500/50'
-                      : state === 'thinking'
-                        ? 'bg-gradient-to-br from-yellow-400 to-orange-600 shadow-2xl shadow-yellow-500/50'
-                        : state === 'speaking'
-                          ? 'bg-gradient-to-br from-blue-400 to-purple-600 shadow-2xl shadow-blue-500/50 animate-pulse'
-                          : 'bg-gradient-to-br from-gray-400 to-gray-600 shadow-xl'
+                      : connectionState === 'connected'
+                        ? 'bg-gradient-to-br from-blue-400 to-purple-600 shadow-2xl shadow-blue-500/50'
+                        : 'bg-gradient-to-br from-gray-400 to-gray-600 shadow-xl'
                   }`}
                   style={{
-                    transform: isSpeaking && state === 'listening' ? `scale(${1 + audioLevel})` : 'scale(1)',
+                    transform: isSpeaking ? `scale(${1 + audioLevel})` : 'scale(1)',
                   }}
                 >
                   <span className="text-7xl">
-                    {state === 'listening' ? '🎤' : state === 'thinking' ? '🤔' : state === 'speaking' ? '💬' : '🤖'}
+                    {isSpeaking ? '🎤' : '🤖'}
                   </span>
                 </div>
 
                 {/* Ripple effect when speaking */}
-                {isSpeaking && state === 'listening' && (
+                {isSpeaking && (
                   <>
                     <div className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-30" />
                     <div className="absolute inset-0 rounded-full bg-green-400 animate-pulse opacity-20" />
-                  </>
-                )}
-
-                {/* Pulse rings for agent speaking */}
-                {state === 'speaking' && (
-                  <>
-                    <div className="absolute inset-0 rounded-full bg-blue-400 animate-ping opacity-30" />
-                    <div className="absolute inset-0 rounded-full bg-blue-400 animate-pulse opacity-20" />
                   </>
                 )}
               </div>
@@ -362,29 +371,22 @@ function VoiceBotSession({ participantName }: { participantName: string }) {
               {/* State Description */}
               <div className="text-center space-y-2">
                 <p className="text-lg font-semibold text-gray-700 dark:text-gray-300">
-                  {state === 'listening' && (
+                  {isSpeaking ? (
                     <span className="text-green-600 dark:text-green-400">
-                      🎧 I'm listening...
+                      🎧 I&apos;m listening...
                     </span>
-                  )}
-                  {state === 'thinking' && (
-                    <span className="text-yellow-600 dark:text-yellow-400">
-                      ⚙️ Processing your request...
-                    </span>
-                  )}
-                  {state === 'speaking' && (
-                    <span className="text-blue-600 dark:text-blue-400">
-                      🔊 Speaking to you...
-                    </span>
-                  )}
-                  {state === 'idle' && (
+                  ) : connectionState === 'connected' ? (
                     <span className="text-gray-600 dark:text-gray-400">
                       ⭐ Ready to help
+                    </span>
+                  ) : (
+                    <span className="text-yellow-600 dark:text-yellow-400">
+                      🔄 Connecting...
                     </span>
                   )}
                 </p>
                 
-                {isSpeaking && state === 'listening' && (
+                {isSpeaking && (
                   <div className="flex items-center justify-center space-x-2 text-sm text-green-600 dark:text-green-400 animate-pulse">
                     <span className="inline-block w-1 h-1 bg-green-500 rounded-full animate-bounce" />
                     <span className="inline-block w-1 h-1 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
@@ -454,14 +456,13 @@ function VoiceBotSession({ participantName }: { participantName: string }) {
                 </div>
               ))}
               
-              {/* Typing indicator when agent is thinking */}
-              {state === 'thinking' && (
-                <div className="flex justify-start">
-                  <div className="bg-gray-200 dark:bg-gray-700 rounded-2xl rounded-bl-none px-6 py-4 shadow-md">
-                    <div className="flex space-x-2">
-                      <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" />
-                      <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                      <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+              {/* Connection status indicator */}
+              {connectionState === 'connecting' && (
+                <div className="flex justify-center">
+                  <div className="bg-blue-100 dark:bg-blue-900 rounded-2xl px-6 py-4 shadow-md">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-4 h-4 bg-blue-500 rounded-full animate-spin" />
+                      <span className="text-blue-700 dark:text-blue-300">Connecting to voice bot...</span>
                     </div>
                   </div>
                 </div>
@@ -470,6 +471,9 @@ function VoiceBotSession({ participantName }: { participantName: string }) {
           </div>
         </div>
       </div>
+
+      {/* Hidden audio element for TTS playback */}
+      <audio ref={audioRef} style={{ display: 'none' }} />
     </div>
   );
 }

@@ -39,7 +39,7 @@ export async function POST(req: Request) {
 
     // Generate unique room and participant
     const participantIdentity = `helpdesk_user_${Math.floor(Math.random() * 10_000)}`;
-    const roomName = `helpdesk_room_${Math.floor(Math.random() * 10_000)}`;
+    const roomName = 'demo-room'; // FIXED: Use static room for manual demo
 
     // Create access token
     const at = new AccessToken(API_KEY, API_SECRET, {

@@ -246,6 +246,26 @@ export class VoiceAgent {
       // Update conversation context based on current state
       await this.updateContextFromUserInput(userMessage);
 
+      // If we're in TICKET_CREATION state, add collected context to help LLM create ticket
+      if (this.conversation.getState() === ConversationState.TICKET_CREATION) {
+        const context = this.conversation.getContext();
+        const contextSummary = `COLLECTED CUSTOMER INFORMATION:
+Name: ${context.name || 'Not provided'}
+Email: ${context.email || 'Not provided'}
+Phone: ${context.phone || 'Not provided'}
+Address: ${context.address || 'Not provided'}
+Issue: ${context.issue || 'Not provided'}
+Issue Type: ${context.issueType || 'Not classified'}
+Price: $${context.price || 'Not set'}
+
+Please create the ticket using the create_ticket tool with these exact values.`;
+        
+        this.conversationHistory.push({
+          role: 'system',
+          content: contextSummary,
+        });
+      }
+
       // Get LLM response with tools
       const llmResponse = await this.providers.llm.complete(this.conversationHistory, {
         temperature: 0.7,
@@ -437,12 +457,15 @@ export class VoiceAgent {
 
       const ttsResult = await this.providers.tts.synthesize(text);
 
-      // In production, publish audio to room
-      // await this.room.localParticipant.publishData(ttsResult.audio);
+      // Publish audio data to LiveKit room for frontend to play
+      await this.room.localParticipant.publishData(ttsResult.audio, {
+        reliable: false, // Use unreliable delivery for real-time audio
+        topic: 'tts-audio',
+      });
 
-      logger.info({ textLength: text.length, audioSize: ttsResult.audio.length }, 'response sent');
+      logger.info({ textLength: text.length, audioSize: ttsResult.audio.length }, 'TTS audio sent to room');
     } catch (error) {
-      logger.error({ err: error }, 'failed to send response');
+      logger.error({ err: error }, 'failed to send TTS response');
       throw error;
     }
   }

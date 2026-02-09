@@ -15,7 +15,7 @@ const envSchema = z.object({
   STT_MODEL: z.string().default('base'),
   DEEPGRAM_API_KEY: z.string().optional(),
   WHISPER_BASE_URL: z.string().default('http://whispercpp:9000'),
-  WHISPER_API_STYLE: z.enum(['whispercpp', 'openai']).default('openai'),
+  WHISPER_API_STYLE: z.enum(['whispercpp', 'openai', 'onerahmet']).default('openai'),
   WHISPER_MODEL: z.string().default('base'),
   LLM_PROVIDER: z.enum(['anthropic', 'openai', 'ollama']).default('ollama'),
   LLM_MODEL: z.string().default('llama3.1'),

@@ -1,184 +1,93 @@
-# Voice Bot Demo Script
+# Voice Bot Demo Script (Local AI Edition)
 
-## Setup Instructions
+## 🎥 Setup Instructions
 
-### 1. Start PostgreSQL Database
+### 1. Start Docker Services (Terminal 1)
+
+Ensure all local AI containers (Ollama, Whisper, Piper) are running.
 
 ```bash
 docker compose up -d
+# Wait for containers to be healthy
+docker compose ps
+# Ensure Ollama model is ready (run once)
+docker exec voicebot_ollama ollama pull llama3.1
 ```
 
-### 2. Run Database Migrations
+### 2. Start Frontend (Terminal 2)
+
+Runs the Next.js UI on port 3002.
 
 ```bash
-npm run prisma:migrate
-npm run prisma:seed
-```
-
-### 3. Configure Environment
-
-Update `.env` with your API keys:
-
-```env
-LIVEKIT_URL=wss://your-project.livekit.cloud
-LIVEKIT_API_KEY=your_key
-LIVEKIT_API_SECRET=your_secret
-DEEPGRAM_API_KEY=your_key
-ANTHROPIC_API_KEY=your_key
-OPENAI_API_KEY=your_key
-```
-
-### 4. Start the Voice Bot Server
-
-```bash
+cd frontend
 npm run dev
 ```
 
-### 5. Open the Web Client
+### 3. Start Voice Bot (Terminal 3)
 
-Open `web/index.html` in your browser (or serve with a local HTTP server)
-
-## Demo Flow
-
-### Introduction (30 seconds)
-
-"Welcome to the IT Help Desk Voice Bot demo. This production-ready system uses:
-
-- LiveKit for real-time voice streaming
-- Deepgram for Speech-to-Text
-- Claude Haiku for conversation management
-- OpenAI TTS for natural voice responses
-- PostgreSQL for ticket storage"
-
-### Architecture Walkthrough (1 minute)
-
-Show the codebase structure:
-
-1. **src/agents/** - Voice pipeline integration
-2. **src/domain/** - State machine and issue classifier
-3. **src/services/** - Provider factories and tools
-4. **src/data/** - Repository pattern with Prisma
-
-Highlight:
-
-- Strict TypeScript with comprehensive types
-- Deterministic validation (not relying on LLM alone)
-- Keyword-based issue classification
-- Tool calling system for structured actions
-
-### Live Demo - Happy Path (2 minutes)
-
-**Start the call and demonstrate full flow:**
-
-1. **Greeting**
-   - Bot: "Hello! I'm here to help you create an IT support ticket. May I have your name please?"
-   - User: "My name is Sarah Chen"
-
-2. **Collect Email**
-   - Bot: "Great, Sarah Chen! What's your email address?"
-   - User: "<sarah.chen@company.com>"
-
-3. **Collect Phone**
-   - Bot: "Thank you. What's your phone number?"
-   - User: "510-555-1234"
-
-4. **Collect Address**
-   - Bot: "And your address?"
-   - User: "123 Oak Street, San Francisco, CA 94102"
-
-5. **Collect Issue**
-   - Bot: "What IT issue are you experiencing?"
-   - User: "My laptop has been running very slow lately"
-
-6. **Confirmation**
-   - Bot: "Let me confirm: Your name is Sarah Chen, email <sarah.chen@company.com>..."
-   - User: "Yes, that's correct"
-
-7. **Ticket Creation**
-   - Bot: "Perfect! I've created ticket #XYZ123. The service cost is $25. You'll receive a confirmation email shortly."
-
-Show the database record in Prisma Studio.
-
-### Edge Case Demonstrations (2 minutes)
-
-#### Case 1: Invalid Email
-
-- User: "my email is sarah at company dot com"
-- Bot: "I couldn't validate that email format. Please provide it like <user@example.com>"
-
-#### Case 2: User Provides Multiple Fields at Once
-
-- User: "Hi, I'm John Doe, email <john@example.com>, I need help with my printer"
-- Bot: "Thank you John! I have your email. Let me get your phone number..."
-
-#### Case 3: Unclear Issue (Triggers Clarification)
-
-- User: "My computer isn't working right"
-- Bot: "I'd like to confirm which issue: 1. Wi-Fi problems ($20), 2. Email login ($15), 3. Slow performance ($25), 4. Printer ($10)"
-
-#### Case 4: User Wants to Correct Information
-
-- User: "Wait, change my phone number to 415-555-9999"
-- Bot: "I've updated your phone number. Let me confirm all details again..."
-
-### Code Highlights (1 minute)
-
-Show in VS Code:
-
-1. **State Machine** (`src/domain/conversation/state.ts`)
-   - 11 explicit states with validated transitions
-   - getMissingFields() for recovery
-
-2. **Issue Classifier** (`src/domain/issue/IssueClassifier.ts`)
-   - Keyword matching (primary)
-   - Confidence scoring
-   - Clarification prompts
-
-3. **Validation** (`src/utils/validation.ts`)
-   - Regex-based email/phone validation
-   - Type guards and sanitization
-
-4. **Tool System** (`src/services/tools/ToolExecutor.ts`)
-   - Zod schema validation
-   - Structured LLM function calling
-
-### Technical Highlights (30 seconds)
-
-"Key architectural decisions:
-
-- **Not LLM-dependent**: Validation and classification use deterministic logic
-- **Production-ready**: Logging, error handling, cost tracking, optimistic locking
-- **Type-safe**: Strict TypeScript throughout
-- **Testable**: Repository pattern, dependency injection
-- **Observable**: Structured logging with Pino, conversation logs for debugging"
-
-## Testing After Demo
+Runs the logic layer. Note: We use a special script to handle local networking between Host and Docker.
 
 ```bash
-# Run tests
-npm test
-
-# Check linting
-npm run lint
-
-# Build for production
-npm run build
-
-# View database
-npx prisma studio
+npx tsx src/run-bot.ts
 ```
 
-## Deployment Notes
+### 4. Connect
 
-Mention deployment options:
+Open `http://localhost:3002` in your browser. Enter a name and click **Connect**.
 
-- **Backend**: Render/Railway with managed PostgreSQL
-- **LiveKit**: LiveKit Cloud free tier (1000 min/month)
-- **Costs**: Optimized for free tiers (Deepgram, Claude Haiku, OpenAI TTS)
+---
 
-## Q&A Points
+## 🗣️ Demo Script + Talking Points
 
-- Why LiveKit? Low latency, WebRTC, production-ready
-- Why not just LLM? Unreliable for validation/structured data
-- State machine vs. prompt engineering? Explicit control flow
-- Scalability? Repository pattern, connection pooling, horizontal scaling ready
+### 1. Introduction (30 seconds)
+
+"Welcome to the IT Help Desk Voice Bot. This is a **fully local, privacy-first** implementation that runs entirely on-premise without sending data to external cloud providers (except for the WebRTC transport via LiveKit).
+
+Our stack includes:
+
+- **LiveKit** for real-time audio streaming.
+- **Whisper (via Docker)** for local Speech-to-Text.
+- **Ollama (Llama 3.1)** for local intelligence.
+- **Piper TTS (custom microservice)** for low-latency local voice synthesis."
+
+### 2. Architecture & Edge Case Handling (1 minute)
+
+"I built this system to be robust and deterministic. We do **not** rely solely on the LLM, which can be unpredictable. Instead, we use a hybrid approach:"
+
+**Show Code:** `src/domain/conversation/state.ts`
+> "This State Machine enforces a strict flow. The LLM cannot hallucinate a jump from 'Greeting' to 'Ticket Creation' without passing through specific validation steps."
+
+**Show Code:** `src/domain/issue/IssueClassifier.ts`
+> "For issue classification, we prioritize **Keyword Matching** over Semantic Search. If a user says 'printer', we map it instantly with 100% confidence. Only ambiguous queries go to the LLM, and even then, we require a high confidence threshold or we ask clarifying questions."
+
+### 3. Live Demo - Happy Path (2 minutes)
+
+*Performance Note: Since we are running AI locally on CPU, there may be a 1-2 second pause between turns.*
+
+1. **Greeting:** Bot asks for name.
+    - *User:* "Hi, I'm [Your Name]."
+2. **Contact Info:** Bot asks for email and phone.
+    - *User:* "[yourname]@company.com"
+    - *User:* "555-0123"
+3. **Issue:** Bot asks for the problem.
+    - *User:* "My printer is jammed again." (Triggers keyword match)
+4. **Confirmation & Ticket:** Bot summarizes and gives a price ($10).
+    - *User:* "Yes, go ahead."
+
+### 4. Technical Deep Dive (1 minute)
+
+**Highlight 1: Resilient Networking**
+> "One challenge we solved was networking between the Windows Host and Docker containers. We implemented a dynamic configuration loader (`src/run-bot.ts`) that automatically bridges `localhost` ports for debugging while preserving internal Docker DNS for production deployment. This handles the 'works on my machine' edge case."
+
+**Highlight 2: Custom Microservices**
+> "We encountered protocol incompatibilities with standard TTS containers. To fix this, I engineered a custom microservice wrapper for the Piper TTS engine (in `piper-service/`) that provides a standardized HTTP API, ensuring reliable audio synthesis regardless of the underlying binary."
+
+### 5. Deployment Verified
+
+"We verify deployment readiness with a robust test suite:"
+
+```bash
+npm test
+```
+
+(Show that tests pass, validating the state machine logic)

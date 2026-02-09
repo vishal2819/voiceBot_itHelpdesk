@@ -1,4 +1,5 @@
 services:
+  # Database
   postgres:
     image: postgres:16-alpine
     container_name: voicebot_postgres
@@ -53,7 +54,8 @@ services:
       ASR_ENGINE: openai_whisper
 
   piper:
-    image: linuxserver/piper:2.2.2-gpu
+    build:
+      context: ./piper-service
     container_name: voicebot_piper
     ports:
       - '5002:5002'
