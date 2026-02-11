@@ -1,8 +1,5 @@
 import { AudioFrame, AudioSource, AudioStream, LocalAudioTrack, Room, RoomEvent, Track, TrackKind } from '@livekit/rtc-node';
-import { TrackPublishOptionsSchema } from '@livekit/rtc-node/dist/proto/room_pb.js';
 import { AccessToken } from 'livekit-server-sdk';
-import { create } from '@bufbuild/protobuf';
-
 import { loadEnv } from '../config/env.js';
 import { ConversationLogRepository } from '../data/repositories/ConversationLogRepository.js';
 import { ConversationManager } from '../domain/conversation/ConversationManager.js';
