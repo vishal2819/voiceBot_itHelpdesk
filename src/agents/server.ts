@@ -104,7 +104,8 @@ app.post('/token', async (req, res) => {
           details: validation.error 
         });
       }
-      roomName = validation.sanitized!;
+      // TypeScript knows sanitized is defined when isValid is true
+      roomName = validation.sanitized as string;
     } else {
       // Generate a secure room name if not provided
       roomName = `helpdesk_room_${Math.floor(Math.random() * 10_000)}`;
