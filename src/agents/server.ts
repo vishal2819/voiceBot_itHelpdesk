@@ -52,6 +52,43 @@ app.get('/health', async (req, res) => {
 });
 
 /**
+ * Validate room name to prevent security issues
+ * Room names must be alphanumeric with optional hyphens/underscores
+ */
+function validateRoomName(roomName: string): { isValid: boolean; sanitized?: string; error?: string } {
+  // Check length constraints (3-50 characters)
+  if (roomName.length < 3 || roomName.length > 50) {
+    return {
+      isValid: false,
+      error: 'Room name must be between 3 and 50 characters',
+    };
+  }
+
+  // Only allow alphanumeric, hyphens, and underscores
+  const validPattern = /^[a-zA-Z0-9_-]+$/;
+  if (!validPattern.test(roomName)) {
+    return {
+      isValid: false,
+      error: 'Room name can only contain letters, numbers, hyphens, and underscores',
+    };
+  }
+
+  // Prevent common injection patterns
+  const dangerousPatterns = ['..', '//', '\\\\', '<', '>', '"', "'"];
+  if (dangerousPatterns.some(pattern => roomName.includes(pattern))) {
+    return {
+      isValid: false,
+      error: 'Room name contains invalid characters',
+    };
+  }
+
+  return {
+    isValid: true,
+    sanitized: roomName.toLowerCase(), // Normalize to lowercase
+  };
+}
+
+/**
  * Generate LiveKit token for client
  * Note: Agent dispatch is now handled by LiveKit Cloud or separate agent service
  */
@@ -65,8 +102,22 @@ app.post('/token', async (req, res) => {
   try {
     // Generate unique identifiers
     const participantIdentity = `helpdesk_user_${Math.floor(Math.random() * 10_000)}`;
-    // Use client-provided roomName or generate one
-    const roomName = clientRoomName || `helpdesk_room_${Math.floor(Math.random() * 10_000)}`;
+    
+    // Validate and sanitize client-provided roomName, or generate a secure one
+    let roomName: string;
+    if (clientRoomName) {
+      const validation = validateRoomName(clientRoomName);
+      if (!validation.isValid) {
+        return res.status(400).json({ 
+          error: 'Invalid room name', 
+          details: validation.error 
+        });
+      }
+      roomName = validation.sanitized!;
+    } else {
+      // Generate a secure room name if not provided
+      roomName = `helpdesk_room_${Math.floor(Math.random() * 10_000)}`;
+    }
 
     // Create access token
     const at = new AccessToken(config.LIVEKIT_API_KEY, config.LIVEKIT_API_SECRET, {

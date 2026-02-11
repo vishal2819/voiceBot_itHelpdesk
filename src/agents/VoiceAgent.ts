@@ -1,7 +1,5 @@
 import { AudioFrame, AudioSource, AudioStream, LocalAudioTrack, Room, RoomEvent, Track, TrackKind } from '@livekit/rtc-node';
-import { TrackPublishOptionsSchema } from '@livekit/rtc-node/dist/proto/room_pb.js';
 import { AccessToken } from 'livekit-server-sdk';
-import { create } from '@bufbuild/protobuf';
 
 import { loadEnv } from '../config/env.js';
 import { ConversationLogRepository } from '../data/repositories/ConversationLogRepository.js';
@@ -116,13 +114,9 @@ export class VoiceAgent {
         throw new Error('Local participant not available');
       }
 
-      // Create publish options with default audio settings
-      const publishOptions = create(TrackPublishOptionsSchema, {
-        dtx: true, // Enable discontinuous transmission for silence
-        red: true, // Enable redundancy for packet loss
-      });
-
-      const publication = await this.room.localParticipant.publishTrack(this.audioTrack, publishOptions);
+      // Publish track with default audio settings
+      // LiveKit SDK handles optimal audio settings internally
+      const publication = await this.room.localParticipant.publishTrack(this.audioTrack);
 
       // CRITICAL: Wait for at least one subscriber before sending audio
       // Without this, audio frames will be dropped
@@ -188,9 +182,9 @@ export class VoiceAgent {
             // Calculate RMS energy of the frame for VAD
             const rms = this.calculateRMS(frame);
             
-            // Log every 50th frame to show we're receiving audio + RMS values
+            // Log every 50th frame to show we're receiving audio + RMS values (debug level)
             if (totalFramesReceived % 50 === 1) {
-              logger.info({ 
+              logger.debug({ 
                 totalFrames: totalFramesReceived, 
                 rms: Math.round(rms),
                 threshold: SILENCE_THRESHOLD,
@@ -320,6 +314,20 @@ export class VoiceAgent {
     try {
       logger.info({ userMessage, state: this.conversation.getState() }, 'processing user input');
 
+      // Publish user transcript to room
+      if (this.room.localParticipant) {
+        const transcriptData = JSON.stringify({
+          type: 'transcript',
+          role: 'user',
+          message: userMessage,
+          timestamp: new Date().toISOString(),
+        });
+        await this.room.localParticipant.publishData(
+          new TextEncoder().encode(transcriptData),
+          { topic: 'transcript' },
+        );
+      }
+
       // Add user message to history
       this.conversationHistory.push({
         role: 'user',
@@ -384,6 +392,20 @@ Please create the ticket using the create_ticket tool with these exact values.`;
           role: 'assistant',
           content: llmResponse.content,
         });
+
+        // Publish assistant transcript to room
+        if (this.room.localParticipant) {
+          const transcriptData = JSON.stringify({
+            type: 'transcript',
+            role: 'assistant',
+            message: llmResponse.content,
+            timestamp: new Date().toISOString(),
+          });
+          await this.room.localParticipant.publishData(
+            new TextEncoder().encode(transcriptData),
+            { topic: 'transcript' },
+          );
+        }
 
         // Send TTS response
         logger.info({ responseText: llmResponse.content.substring(0, 100) }, 'sending TTS response');
@@ -534,6 +556,22 @@ Please create the ticket using the create_ticket tool with these exact values.`;
             this.conversation.updateField('ticketNumber', parsed.ticketNumber);
             this.conversation.transitionTo(ConversationState.CONFIRMATION);
             logger.info({ ticketNumber: parsed.ticketNumber }, 'ticket created successfully');
+
+            // Publish ticket creation event to room
+            if (this.room.localParticipant) {
+              const ticketData = JSON.stringify({
+                type: 'ticket_created',
+                ticketNumber: parsed.ticketNumber,
+                ticketId: parsed.ticketId,
+                issueType: this.conversation.getContext().issueType,
+                price: this.conversation.getContext().price,
+                timestamp: new Date().toISOString(),
+              });
+              await this.room.localParticipant.publishData(
+                new TextEncoder().encode(ticketData),
+                { topic: 'ticket' },
+              );
+            }
           }
           break;
       }
@@ -556,6 +594,18 @@ Please create the ticket using the create_ticket tool with these exact values.`;
       logger.debug({ text }, 'synthesizing TTS response');
 
       const ttsResult = await this.providers.tts.synthesize(text);
+
+      // Validate that the TTS provider returns PCM format
+      const format = ttsResult.metadata?.format as string | undefined;
+      if (format && format !== 'pcm') {
+        logger.error(
+          { provider: ttsResult.metadata?.provider, format },
+          'TTS provider returned non-PCM format. Audio track output requires PCM. Please configure a TTS provider that returns raw PCM (e.g., OpenAI, ElevenLabs).',
+        );
+        throw new Error(
+          `Unsupported TTS format: ${format}. Audio track output requires PCM format.`,
+        );
+      }
 
       // Convert PCM buffer to audio frames and push to audio source
       const sampleRate = (ttsResult.metadata?.sampleRate as number) || TTS_SAMPLE_RATE;
