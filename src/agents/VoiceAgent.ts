@@ -1,5 +1,7 @@
-import { AudioFrame, AudioStream, Room, RoomEvent, Track, TrackKind } from '@livekit/rtc-node';
+import { AudioFrame, AudioSource, AudioStream, LocalAudioTrack, Room, RoomEvent, Track, TrackKind } from '@livekit/rtc-node';
+import { TrackPublishOptionsSchema } from '@livekit/rtc-node/dist/proto/room_pb.js';
 import { AccessToken } from 'livekit-server-sdk';
+import { create } from '@bufbuild/protobuf';
 
 import { loadEnv } from '../config/env.js';
 import { ConversationLogRepository } from '../data/repositories/ConversationLogRepository.js';
@@ -23,6 +25,10 @@ import {
 
 const config = loadEnv();
 
+// TTS audio format: 24kHz, 16-bit mono PCM (standard for OpenAI and ElevenLabs)
+const TTS_SAMPLE_RATE = 24000;
+const TTS_CHANNELS = 1;
+
 /**
  * LiveKit Voice Agent for IT Help Desk
  * Handles real-time voice conversation flow with STT → LLM → TTS pipeline
@@ -37,6 +43,11 @@ export class VoiceAgent {
   private isProcessing = false;
   private conversationHistory: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> =
     [];
+
+  // Audio output for TTS playback
+  private audioSource: AudioSource | null = null;
+  private audioTrack: LocalAudioTrack | null = null;
+  private isSpeaking = false;
 
   constructor(roomName: string, participantIdentity: string) {
     this.room = new Room();
@@ -66,13 +77,65 @@ export class VoiceAgent {
 
     logger.info({ roomName: this.room.name }, 'connected to LiveKit room');
 
-    // Set up event handlers
+    // Set up event handlers BEFORE initializing audio (to catch track events)
     this.setupEventHandlers();
+
+    // Handle any existing participants' audio tracks
+    for (const participant of this.room.remoteParticipants.values()) {
+      logger.info({ participantId: participant.identity }, 'found existing participant');
+      for (const publication of participant.trackPublications.values()) {
+        if (publication.track && publication.track.kind === TrackKind.KIND_AUDIO) {
+          logger.info({ participantId: participant.identity }, 'subscribing to existing audio track');
+          await this.handleAudioTrack(publication.track);
+        }
+      }
+    }
+
+    // Initialize audio output for TTS
+    await this.initializeAudioOutput();
 
     // Send initial greeting
     await this.sendResponse(
       "Hello! I'm here to help you create an IT support ticket. May I have your name please?",
     );
+  }
+
+  /**
+   * Initialize audio source and track for TTS output
+   */
+  private async initializeAudioOutput(): Promise<void> {
+    try {
+      // TTS providers return 24kHz, 16-bit mono PCM
+      const sampleRate = TTS_SAMPLE_RATE;
+      const channels = TTS_CHANNELS;
+
+      this.audioSource = new AudioSource(sampleRate, channels);
+      this.audioTrack = LocalAudioTrack.createAudioTrack('agent-voice', this.audioSource);
+
+      if (!this.room.localParticipant) {
+        throw new Error('Local participant not available');
+      }
+
+      // Create publish options with default audio settings
+      const publishOptions = create(TrackPublishOptionsSchema, {
+        dtx: true, // Enable discontinuous transmission for silence
+        red: true, // Enable redundancy for packet loss
+      });
+
+      const publication = await this.room.localParticipant.publishTrack(this.audioTrack, publishOptions);
+
+      // CRITICAL: Wait for at least one subscriber before sending audio
+      // Without this, audio frames will be dropped
+      await publication.waitForSubscription();
+
+      logger.info(
+        { sampleRate, channels, trackSid: this.audioTrack.sid },
+        'audio output track published and subscribed',
+      );
+    } catch (error) {
+      logger.error({ err: error }, 'failed to initialize audio output');
+      throw error;
+    }
   }
 
   /**
@@ -108,19 +171,35 @@ export class VoiceAgent {
       let audioFrames: AudioFrame[] = [];
       let silentFrameCount = 0;
       let speechFrameCount = 0;
-      const SILENCE_THRESHOLD = 500; // Audio amplitude threshold for silence detection
-      const SILENCE_FRAMES_REQUIRED = 25; // ~1.5 seconds of silence at 16kHz
-      const MIN_SPEECH_FRAMES = 8; // Minimum speech frames before processing
-      const MIN_SPEECH_DURATION_MS = 500; // Minimum 500ms of audio to process
+      let totalFramesReceived = 0;
+      const SILENCE_THRESHOLD = 50; // Very low threshold for better sensitivity
+      const SILENCE_FRAMES_REQUIRED = 20; // ~400ms of silence at 16kHz with 20ms frames
+      const MIN_SPEECH_FRAMES = 3; // Minimum speech frames before processing
+      const MIN_SPEECH_DURATION_MS = 200; // Minimum 200ms of audio to process
 
-      logger.info('audio stream created, starting to process frames with VAD');
+      logger.info({ sampleRate: 16000, channels: 1, silenceThreshold: SILENCE_THRESHOLD }, 'audio stream created, starting to process frames with VAD');
 
       // Process audio frames asynchronously
       (async () => {
         try {
           for await (const frame of audioStream) {
+            totalFramesReceived++;
+            
             // Calculate RMS energy of the frame for VAD
             const rms = this.calculateRMS(frame);
+            
+            // Log every 50th frame to show we're receiving audio + RMS values
+            if (totalFramesReceived % 50 === 1) {
+              logger.info({ 
+                totalFrames: totalFramesReceived, 
+                rms: Math.round(rms),
+                threshold: SILENCE_THRESHOLD,
+                isSpeech: rms >= SILENCE_THRESHOLD,
+                speechFrameCount,
+                silentFrameCount,
+                bufferedFrames: audioFrames.length
+              }, 'audio frame stats');
+            }
             const isSilent = rms < SILENCE_THRESHOLD;
 
             if (isSilent) {
@@ -142,6 +221,8 @@ export class VoiceAgent {
                   // Convert audio frames to buffer for STT
                   const audioData = this.audioFramesToBuffer(audioFrames);
                   
+                  logger.info({ audioBufferSize: audioData.length }, 'sending audio to STT');
+                  
                   // Reset for next utterance
                   audioFrames = [];
                   silentFrameCount = 0;
@@ -149,13 +230,15 @@ export class VoiceAgent {
 
                   // Transcribe
                   try {
+                    logger.info('calling STT transcribe...');
                     const result = await this.providers.stt.transcribe(audioData);
+                    logger.info({ resultText: result.text, resultConfidence: result.confidence }, 'STT returned');
 
                     if (result.text && result.text.trim().length > 0) {
                       logger.info({ transcript: result.text, confidence: result.confidence }, 'user speech transcribed');
                       await this.processUserInput(result.text);
                     } else {
-                      logger.debug('empty transcript, ignoring');
+                      logger.info('empty transcript from STT, ignoring');
                     }
                   } catch (error) {
                     logger.error({ err: error }, 'STT error');
@@ -174,12 +257,12 @@ export class VoiceAgent {
               audioFrames.push(frame);
               
               if (speechFrameCount === 1) {
-                logger.debug({ rms }, 'speech started');
+                logger.info({ rms, threshold: SILENCE_THRESHOLD }, 'speech started');
               }
             }
           }
 
-          logger.info('audio stream ended');
+          logger.info({ totalFramesReceived }, 'audio stream ended');
         } catch (error) {
           logger.error({ err: error }, 'error in audio stream processing loop');
         }
@@ -267,12 +350,19 @@ Please create the ticket using the create_ticket tool with these exact values.`;
       }
 
       // Get LLM response with tools
+      logger.info('calling LLM...');
       const llmResponse = await this.providers.llm.complete(this.conversationHistory, {
         temperature: 0.7,
         maxTokens: 300,
         tools: toolDefinitions,
         toolChoice: 'auto',
       });
+      logger.info({ 
+        hasContent: !!llmResponse.content, 
+        contentLength: llmResponse.content?.length,
+        toolCallsCount: llmResponse.toolCalls?.length || 0,
+        tokens: llmResponse.usage.totalTokens 
+      }, 'LLM responded');
 
       // Handle tool calls if any
       if (llmResponse.toolCalls && llmResponse.toolCalls.length > 0) {
@@ -296,7 +386,11 @@ Please create the ticket using the create_ticket tool with these exact values.`;
         });
 
         // Send TTS response
+        logger.info({ responseText: llmResponse.content.substring(0, 100) }, 'sending TTS response');
         await this.sendResponse(llmResponse.content);
+        logger.info('TTS response sent');
+      } else {
+        logger.warn('LLM returned no content, nothing to say');
       }
 
       // Track usage
@@ -449,25 +543,80 @@ Please create the ticket using the create_ticket tool with these exact values.`;
   }
 
   /**
-   * Send TTS response to room
+   * Send TTS response to room via audio track
    */
   private async sendResponse(text: string): Promise<void> {
+    if (!this.audioSource) {
+      logger.error('audio source not initialized, cannot send response');
+      return;
+    }
+
     try {
-      logger.debug({ text }, 'sending TTS response');
+      this.isSpeaking = true;
+      logger.debug({ text }, 'synthesizing TTS response');
 
       const ttsResult = await this.providers.tts.synthesize(text);
 
-      // Publish audio data to LiveKit room for frontend to play
-      await this.room.localParticipant.publishData(ttsResult.audio, {
-        reliable: false, // Use unreliable delivery for real-time audio
-        topic: 'tts-audio',
-      });
+      // Convert PCM buffer to audio frames and push to audio source
+      const sampleRate = (ttsResult.metadata?.sampleRate as number) || TTS_SAMPLE_RATE;
+      const channels = (ttsResult.metadata?.channels as number) || TTS_CHANNELS;
+      const audioFrames = this.pcmBufferToAudioFrames(ttsResult.audio, sampleRate, channels);
 
-      logger.info({ textLength: text.length, audioSize: ttsResult.audio.length }, 'TTS audio sent to room');
+      logger.info(
+        { textLength: text.length, audioSize: ttsResult.audio.length, frameCount: audioFrames.length },
+        'publishing TTS audio frames',
+      );
+
+      // Push each frame to the audio source
+      for (const frame of audioFrames) {
+        await this.audioSource.captureFrame(frame);
+      }
+
+      // Wait for all audio to be played before marking as done
+      await this.audioSource.waitForPlayout();
+
+      logger.debug('TTS audio playback complete');
     } catch (error) {
       logger.error({ err: error }, 'failed to send TTS response');
-      throw error;
+      // Don't throw - TTS failure shouldn't crash the bot
+    } finally {
+      this.isSpeaking = false;
     }
+  }
+
+  /**
+   * Convert PCM buffer to AudioFrame objects
+   * PCM format: 16-bit signed little-endian
+   */
+  private pcmBufferToAudioFrames(
+    pcmBuffer: Buffer,
+    sampleRate: number,
+    channels: number,
+  ): AudioFrame[] {
+    const frames: AudioFrame[] = [];
+    const bytesPerSample = 2; // 16-bit = 2 bytes
+    const samplesPerFrame = Math.floor(sampleRate * 0.02); // 20ms frames
+    const bytesPerFrame = samplesPerFrame * bytesPerSample * channels;
+
+    for (let offset = 0; offset < pcmBuffer.length; offset += bytesPerFrame) {
+      const frameBytes = Math.min(bytesPerFrame, pcmBuffer.length - offset);
+      const frameSamples = Math.floor(frameBytes / (bytesPerSample * channels));
+
+      if (frameSamples === 0) break;
+
+      // Create Int16Array from PCM data
+      const samples = new Int16Array(frameSamples * channels);
+      for (let i = 0; i < frameSamples * channels; i++) {
+        const byteOffset = offset + i * bytesPerSample;
+        if (byteOffset + 1 < pcmBuffer.length) {
+          samples[i] = pcmBuffer.readInt16LE(byteOffset);
+        }
+      }
+
+      frames.push(new AudioFrame(samples, sampleRate, channels, frameSamples));
+    }
+
+    return frames;
   }
 
   /**
@@ -475,6 +624,15 @@ Please create the ticket using the create_ticket tool with these exact values.`;
    */
   private async cleanup(): Promise<void> {
     logger.info({ sessionId: this.conversation.getContext().sessionId }, 'cleaning up agent');
+
+    // Unpublish audio track
+    if (this.audioTrack && this.room.localParticipant) {
+      try {
+        await this.room.localParticipant.unpublishTrack(this.audioTrack.sid);
+      } catch (error) {
+        logger.warn({ err: error }, 'failed to unpublish audio track');
+      }
+    }
 
     await this.providers.stt.close();
     await this.providers.llm.close();

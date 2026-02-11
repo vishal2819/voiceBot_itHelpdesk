@@ -20,6 +20,9 @@ export class DeepgramSTTProvider implements STTProvider {
         model: 'nova-2',
         smart_format: true,
         punctuate: true,
+        encoding: 'linear16', // 16-bit signed PCM
+        sample_rate: 16000, // 16kHz from AudioStream
+        channels: 1, // mono
       });
 
       if (error) {
