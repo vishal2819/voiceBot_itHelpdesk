@@ -55,7 +55,9 @@ app.get('/health', async (req, res) => {
  * Validate room name to prevent security issues
  * Room names must be alphanumeric with optional hyphens/underscores
  */
-function validateRoomName(roomName: string): { isValid: boolean; sanitized?: string; error?: string } {
+function validateRoomName(roomName: string): 
+  | { isValid: true; sanitized: string }
+  | { isValid: false; error: string } {
   // Check length constraints (3-50 characters)
   if (roomName.length < 3 || roomName.length > 50) {
     return {
@@ -104,8 +106,8 @@ app.post('/token', async (req, res) => {
           details: validation.error 
         });
       }
-      // TypeScript knows sanitized is defined when isValid is true
-      roomName = validation.sanitized as string;
+      // TypeScript now knows sanitized is defined due to discriminated union
+      roomName = validation.sanitized;
     } else {
       // Generate a secure room name if not provided
       roomName = `helpdesk_room_${Math.floor(Math.random() * 10_000)}`;

@@ -594,16 +594,27 @@ Please create the ticket using the create_ticket tool with these exact values.`;
 
       // Validate that the TTS provider returns PCM format
       // If format is undefined/null, we assume PCM (for backward compatibility)
-      // If format is explicitly set to non-PCM (e.g., 'wav', 'mp3'), reject it
+      // If format is provided, it must be a string equal to 'pcm' (case-insensitive)
       const format = ttsResult.metadata?.format;
-      if (typeof format === 'string' && format.toLowerCase() !== TTS_EXPECTED_FORMAT) {
-        logger.error(
-          { provider: ttsResult.metadata?.provider, format },
-          'TTS provider returned non-PCM format. Audio track output requires PCM. Please configure a TTS provider that returns raw PCM (e.g., OpenAI, ElevenLabs).',
-        );
-        throw new Error(
-          `Unsupported TTS format: ${format}. Audio track output requires PCM format.`,
-        );
+      if (format !== undefined && format !== null) {
+        if (typeof format !== 'string') {
+          logger.error(
+            { provider: ttsResult.metadata?.provider, formatType: typeof format },
+            'TTS provider returned non-string format field',
+          );
+          throw new Error(
+            `Invalid TTS format type: expected string, got ${typeof format}`,
+          );
+        }
+        if (format.toLowerCase() !== TTS_EXPECTED_FORMAT) {
+          logger.error(
+            { provider: ttsResult.metadata?.provider, format },
+            'TTS provider returned non-PCM format. Audio track output requires PCM. Please configure a TTS provider that returns raw PCM (e.g., OpenAI, ElevenLabs).',
+          );
+          throw new Error(
+            `Unsupported TTS format: ${format}. Audio track output requires PCM format.`,
+          );
+        }
       }
 
       // Convert PCM buffer to audio frames and push to audio source
