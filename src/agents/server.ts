@@ -73,15 +73,6 @@ function validateRoomName(roomName: string): { isValid: boolean; sanitized?: str
     };
   }
 
-  // Prevent common injection patterns
-  const dangerousPatterns = ['..', '//', '\\\\', '<', '>', '"', "'"];
-  if (dangerousPatterns.some(pattern => roomName.includes(pattern))) {
-    return {
-      isValid: false,
-      error: 'Room name contains invalid characters',
-    };
-  }
-
   return {
     isValid: true,
     sanitized: roomName.toLowerCase(), // Normalize to lowercase

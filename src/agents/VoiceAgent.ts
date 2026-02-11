@@ -596,6 +596,8 @@ Please create the ticket using the create_ticket tool with these exact values.`;
       const ttsResult = await this.providers.tts.synthesize(text);
 
       // Validate that the TTS provider returns PCM format
+      // If format is undefined, we assume PCM (for backward compatibility)
+      // If format is explicitly set to non-PCM (e.g., 'wav', 'mp3'), reject it
       const format = ttsResult.metadata?.format as string | undefined;
       if (format && format !== 'pcm') {
         logger.error(
