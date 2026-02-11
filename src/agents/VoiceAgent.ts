@@ -301,6 +301,24 @@ export class VoiceAgent {
   }
 
   /**
+   * Helper to publish transcript data to room
+   */
+  private async publishTranscript(role: 'user' | 'assistant', message: string): Promise<void> {
+    if (this.room.localParticipant) {
+      const transcriptData = JSON.stringify({
+        type: 'transcript',
+        role,
+        message,
+        timestamp: new Date().toISOString(),
+      });
+      await this.room.localParticipant.publishData(
+        new TextEncoder().encode(transcriptData),
+        { topic: 'transcript' },
+      );
+    }
+  }
+
+  /**
    * Process user input (from transcribed speech)
    */
   async processUserInput(userMessage: string): Promise<void> {
@@ -316,18 +334,7 @@ export class VoiceAgent {
       logger.info({ userMessage, state: this.conversation.getState() }, 'processing user input');
 
       // Publish user transcript to room
-      if (this.room.localParticipant) {
-        const transcriptData = JSON.stringify({
-          type: 'transcript',
-          role: 'user',
-          message: userMessage,
-          timestamp: new Date().toISOString(),
-        });
-        await this.room.localParticipant.publishData(
-          new TextEncoder().encode(transcriptData),
-          { topic: 'transcript' },
-        );
-      }
+      await this.publishTranscript('user', userMessage);
 
       // Add user message to history
       this.conversationHistory.push({
@@ -395,18 +402,7 @@ Please create the ticket using the create_ticket tool with these exact values.`;
         });
 
         // Publish assistant transcript to room
-        if (this.room.localParticipant) {
-          const transcriptData = JSON.stringify({
-            type: 'transcript',
-            role: 'assistant',
-            message: llmResponse.content,
-            timestamp: new Date().toISOString(),
-          });
-          await this.room.localParticipant.publishData(
-            new TextEncoder().encode(transcriptData),
-            { topic: 'transcript' },
-          );
-        }
+        await this.publishTranscript('assistant', llmResponse.content);
 
         // Send TTS response
         logger.info({ responseText: llmResponse.content.substring(0, 100) }, 'sending TTS response');
@@ -597,10 +593,10 @@ Please create the ticket using the create_ticket tool with these exact values.`;
       const ttsResult = await this.providers.tts.synthesize(text);
 
       // Validate that the TTS provider returns PCM format
-      // If format is undefined, we assume PCM (for backward compatibility)
+      // If format is undefined/null, we assume PCM (for backward compatibility)
       // If format is explicitly set to non-PCM (e.g., 'wav', 'mp3'), reject it
       const format = ttsResult.metadata?.format;
-      if (format && typeof format === 'string' && format.toLowerCase() !== TTS_EXPECTED_FORMAT) {
+      if (typeof format === 'string' && format.toLowerCase() !== TTS_EXPECTED_FORMAT) {
         logger.error(
           { provider: ttsResult.metadata?.provider, format },
           'TTS provider returned non-PCM format. Audio track output requires PCM. Please configure a TTS provider that returns raw PCM (e.g., OpenAI, ElevenLabs).',
