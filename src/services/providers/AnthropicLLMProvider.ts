@@ -2,6 +2,14 @@ import Anthropic from '@anthropic-ai/sdk';
 
 import { logger } from '../../utils/logger.js';
 import {
+  CircuitBreaker,
+  DEFAULT_RETRY_CONFIG,
+  LLMError,
+  RetryConfig,
+  withRetry,
+  withTimeout,
+} from './LLMErrorHandler.js';
+import {
   LLMMessage,
   LLMOptions,
   LLMProvider,
@@ -10,18 +18,48 @@ import {
   ToolDefinition,
 } from './types.js';
 
+const DEFAULT_TIMEOUT_MS = 30000; // 30 seconds
+
 export class AnthropicLLMProvider implements LLMProvider {
   private client: Anthropic;
   private model: string;
+  private circuitBreaker: CircuitBreaker;
+  private retryConfig: RetryConfig;
+  private timeoutMs: number;
 
-  constructor(apiKey: string, model = 'claude-3-haiku-20240307') {
+  constructor(
+    apiKey: string,
+    model = 'claude-3-haiku-20240307',
+    options?: {
+      retryConfig?: Partial<RetryConfig>;
+      timeoutMs?: number;
+      circuitBreaker?: CircuitBreaker;
+    },
+  ) {
     this.client = new Anthropic({ apiKey });
     this.model = model;
+    this.retryConfig = { ...DEFAULT_RETRY_CONFIG, ...options?.retryConfig };
+    this.timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.circuitBreaker = options?.circuitBreaker ?? new CircuitBreaker();
   }
 
   async complete(messages: LLMMessage[], options?: LLMOptions): Promise<LLMResult> {
     const startTime = Date.now();
 
+    // Use circuit breaker and retry logic
+    return this.circuitBreaker.execute(() =>
+      withRetry(
+        () => withTimeout(this.executeRequest(messages, options, startTime), this.timeoutMs),
+        this.retryConfig,
+      ),
+    );
+  }
+
+  private async executeRequest(
+    messages: LLMMessage[],
+    options: LLMOptions | undefined,
+    startTime: number,
+  ): Promise<LLMResult> {
     try {
       // Separate system message from conversation
       const systemMessage = messages.find((m) => m.role === 'system');
@@ -100,7 +138,7 @@ export class AnthropicLLMProvider implements LLMProvider {
       };
     } catch (error) {
       logger.error({ err: error }, 'anthropic completion failed');
-      throw error;
+      throw LLMError.fromError(error);
     }
   }
 

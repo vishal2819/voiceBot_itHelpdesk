@@ -3,6 +3,7 @@ import { logger } from '../../utils/logger.js';
 
 import { AnthropicLLMProvider } from './AnthropicLLMProvider.js';
 import { DeepgramSTTProvider } from './DeepgramSTTProvider.js';
+import { ElevenLabsTTSProvider } from './ElevenLabsTTSProvider.js';
 import { OllamaLLMProvider } from './OllamaLLMProvider.js';
 import { OpenAITTSProvider } from './OpenAITTSProvider.js';
 import { PiperTTSProvider } from './PiperTTSProvider.js';
@@ -108,8 +109,18 @@ export class ProviderFactory {
         );
 
       case 'elevenlabs':
-        logger.info('initializing ElevenLabs TTS provider (not implemented)');
-        throw new Error('ElevenLabs TTS provider not implemented yet');
+        if (!this.config.ELEVENLABS_API_KEY) {
+          throw new Error('ELEVENLABS_API_KEY is required for ElevenLabs TTS');
+        }
+        logger.info(
+          { voice: this.config.ELEVENLABS_VOICE_ID, model: this.config.ELEVENLABS_MODEL_ID },
+          'initializing ElevenLabs TTS provider',
+        );
+        return new ElevenLabsTTSProvider(
+          this.config.ELEVENLABS_API_KEY,
+          this.config.ELEVENLABS_VOICE_ID,
+          this.config.ELEVENLABS_MODEL_ID,
+        );
 
       case 'piper':
         logger.info(

@@ -36,30 +36,36 @@ services:
     command: >-
       sh -c "npx prisma migrate deploy && npx prisma db seed && node dist/index.js"
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: voicebot_ollama
-    ports:
-      - '11434:11434'
-    volumes:
-      - ollama_data:/root/.ollama
+  # ============================================
+  # OPTIONAL: Local AI Services (commented out)
+  # Uncomment if you want to use local models
+  # instead of cloud APIs (Deepgram, Anthropic, OpenAI)
+  # ============================================
 
-  whispercpp:
-    image: onerahmet/openai-whisper-asr-webservice:latest
-    container_name: voicebot_whisper
-    ports:
-      - '8080:9000'
-    environment:
-      ASR_MODEL: base
-      ASR_ENGINE: openai_whisper
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: voicebot_ollama
+  #   ports:
+  #     - '11434:11434'
+  #   volumes:
+  #     - ollama_data:/root/.ollama
 
-  piper:
-    build:
-      context: ./piper-service
-    container_name: voicebot_piper
-    ports:
-      - '5002:5002'
+  # whispercpp:
+  #   image: onerahmet/openai-whisper-asr-webservice:latest
+  #   container_name: voicebot_whisper
+  #   ports:
+  #     - '8080:9000'
+  #   environment:
+  #     ASR_MODEL: base
+  #     ASR_ENGINE: openai_whisper
+
+  # piper:
+  #   build:
+  #     context: ./piper-service
+  #   container_name: voicebot_piper
+  #   ports:
+  #     - '5002:5002'
 
 volumes:
   postgres_data:
-  ollama_data:
+  # ollama_data:
