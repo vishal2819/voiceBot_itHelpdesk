@@ -64,7 +64,9 @@ async function requestMicrophonePermission() {
 // Start call
 async function startCall() {
   const participantName = participantNameInput.value.trim() || 'Guest User';
-  const roomName = `helpdesk-${Date.now()}`;
+  // Determine room name: allow override via URL query parameter, default to demo-room to match the bot's default room
+  const urlParams = new URLSearchParams(window.location.search);
+  const roomName = urlParams.get('roomName') || 'demo-room';
 
   try {
     updateStatus('Requesting microphone access...', 'yellow');

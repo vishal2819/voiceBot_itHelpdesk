@@ -56,7 +56,7 @@ app.get('/health', async (req, res) => {
  * Note: Agent dispatch is now handled by LiveKit Cloud or separate agent service
  */
 app.post('/token', async (req, res) => {
-  const { participantName } = req.body;
+  const { participantName, roomName: clientRoomName } = req.body;
 
   if (!participantName) {
     return res.status(400).json({ error: 'participantName required' });
@@ -65,7 +65,8 @@ app.post('/token', async (req, res) => {
   try {
     // Generate unique identifiers
     const participantIdentity = `helpdesk_user_${Math.floor(Math.random() * 10_000)}`;
-    const roomName = `helpdesk_room_${Math.floor(Math.random() * 10_000)}`;
+    // Use client-provided roomName or generate one
+    const roomName = clientRoomName || `helpdesk_room_${Math.floor(Math.random() * 10_000)}`;
 
     // Create access token
     const at = new AccessToken(config.LIVEKIT_API_KEY, config.LIVEKIT_API_SECRET, {

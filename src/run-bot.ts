@@ -1,23 +1,19 @@
 /**
  * Manual Bot Runner
- * This script runs ON THE HOST machine, so it needs to talk to Docker containers via localhost.
- * We override the environment variables programmatically before loading the app.
+ * This script runs ON THE HOST machine, connecting to LiveKit Cloud.
+ * It uses cloud providers (Deepgram, Anthropic, OpenAI) configured via .env
  */
 
-// 1. Force Localhost Networking for this script only
-process.env.PIPER_BASE_URL = 'http://127.0.0.1:5002';
-process.env.WHISPER_BASE_URL = 'http://127.0.0.1:8080';
-process.env.WHISPER_API_STYLE = 'onerahmet'; // Fix 404 error by matching image API
-process.env.OLLAMA_BASE_URL = 'http://127.0.0.1:11434';
-
-// 2. Dynamic imports to ensure env vars are set BEFORE config loads
+// Dynamic imports
 const { AccessToken } = await import('livekit-server-sdk');
 const { VoiceAgent } = await import('./agents/VoiceAgent.js');
 const { loadEnv } = await import('./config/env.js');
 const { logger } = await import('./utils/logger.js');
 
 const config = loadEnv();
-const ROOM_NAME = 'demo-room';
+
+// Allow room name from command line: npx tsx src/run-bot.ts my-room-name
+const ROOM_NAME = process.argv[2] || 'demo-room';
 const AGENT_IDENTITY = 'voice_agent_bot';
 
 async function main() {

@@ -42,6 +42,7 @@ yarn-error.log*
 # Docker volumes (local data)
 postgres_data/
 ollama_data/
+piper_data/
 
 # Temporary files
 *.tmp
