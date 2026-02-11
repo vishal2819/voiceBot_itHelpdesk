@@ -26,6 +26,7 @@ const config = loadEnv();
 // TTS audio format: 24kHz, 16-bit mono PCM (standard for OpenAI and ElevenLabs)
 const TTS_SAMPLE_RATE = 24000;
 const TTS_CHANNELS = 1;
+const TTS_EXPECTED_FORMAT = 'pcm';
 
 /**
  * LiveKit Voice Agent for IT Help Desk
@@ -598,8 +599,8 @@ Please create the ticket using the create_ticket tool with these exact values.`;
       // Validate that the TTS provider returns PCM format
       // If format is undefined, we assume PCM (for backward compatibility)
       // If format is explicitly set to non-PCM (e.g., 'wav', 'mp3'), reject it
-      const format = ttsResult.metadata?.format as string | undefined;
-      if (format && format.toLowerCase() !== 'pcm') {
+      const format = ttsResult.metadata?.format;
+      if (format && format.toLowerCase() !== TTS_EXPECTED_FORMAT) {
         logger.error(
           { provider: ttsResult.metadata?.provider, format },
           'TTS provider returned non-PCM format. Audio track output requires PCM. Please configure a TTS provider that returns raw PCM (e.g., OpenAI, ElevenLabs).',
