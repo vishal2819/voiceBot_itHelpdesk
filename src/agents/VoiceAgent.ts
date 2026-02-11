@@ -6,6 +6,11 @@ import { ConversationManager } from '../domain/conversation/ConversationManager.
 import { ConversationState } from '../domain/conversation/state.js';
 import { IssueClassifier } from '../domain/issue/IssueClassifier.js';
 import { costTracker } from '../services/providers/CostTracker.js';
+import {
+  createFallbackResult,
+  getFallbackResponse,
+  LLMError,
+} from '../services/providers/LLMErrorHandler.js';
 import { ProviderFactory } from '../services/providers/ProviderFactory.js';
 import { getSystemPrompt } from '../services/prompts/systemPrompt.js';
 import { toolDefinitions, ToolExecutor } from '../services/tools/ToolExecutor.js';
@@ -348,21 +353,39 @@ Please create the ticket using the create_ticket tool with these exact values.`;
 
       // Get LLM response with tools
       logger.info('calling LLM...');
-      const llmResponse = await this.providers.llm.complete(this.conversationHistory, {
-        temperature: 0.7,
-        maxTokens: 300,
-        tools: toolDefinitions,
-        toolChoice: 'auto',
-      });
-      logger.info({ 
-        hasContent: !!llmResponse.content, 
-        contentLength: llmResponse.content?.length,
-        toolCallsCount: llmResponse.toolCalls?.length || 0,
-        tokens: llmResponse.usage.totalTokens 
-      }, 'LLM responded');
+      let llmResponse;
+      let usedFallback = false;
 
-      // Handle tool calls if any
-      if (llmResponse.toolCalls && llmResponse.toolCalls.length > 0) {
+      try {
+        llmResponse = await this.providers.llm.complete(this.conversationHistory, {
+          temperature: 0.7,
+          maxTokens: 300,
+          tools: toolDefinitions,
+          toolChoice: 'auto',
+        });
+        logger.info({ 
+          hasContent: !!llmResponse.content, 
+          contentLength: llmResponse.content?.length,
+          toolCallsCount: llmResponse.toolCalls?.length || 0,
+          tokens: llmResponse.usage.totalTokens 
+        }, 'LLM responded');
+      } catch (error) {
+        // Handle LLM failure with fallback
+        const llmError = error instanceof LLMError ? error : LLMError.fromError(error);
+        logger.error(
+          { errorType: llmError.type, retryable: llmError.retryable, message: llmError.message },
+          'LLM failed, using fallback response',
+        );
+
+        // Get context-appropriate fallback
+        const stateKey = this.getStateKey(this.conversation.getState());
+        const fallbackContent = getFallbackResponse(stateKey);
+        llmResponse = createFallbackResult(fallbackContent);
+        usedFallback = true;
+      }
+
+      // Handle tool calls if any (skip if using fallback)
+      if (!usedFallback && llmResponse.toolCalls && llmResponse.toolCalls.length > 0) {
         for (const toolCall of llmResponse.toolCalls) {
           const toolResult = await this.toolExecutor.execute(
             toolCall.function.name,
@@ -375,15 +398,20 @@ Please create the ticket using the create_ticket tool with these exact values.`;
         }
       }
 
-      // Add assistant response to history
+      // Add assistant response to history (skip if fallback to avoid polluting context)
       if (llmResponse.content) {
-        this.conversationHistory.push({
-          role: 'assistant',
-          content: llmResponse.content,
-        });
+        if (!usedFallback) {
+          this.conversationHistory.push({
+            role: 'assistant',
+            content: llmResponse.content,
+          });
+        }
 
         // Send TTS response
-        logger.info({ responseText: llmResponse.content.substring(0, 100) }, 'sending TTS response');
+        logger.info({ 
+          responseText: llmResponse.content.substring(0, 100),
+          isFallback: usedFallback 
+        }, 'sending TTS response');
         await this.sendResponse(llmResponse.content);
         logger.info('TTS response sent');
       } else {
@@ -409,6 +437,7 @@ Please create the ticket using the create_ticket tool with these exact values.`;
         metadata: {
           duration,
           tokens: llmResponse.usage.totalTokens,
+          usedFallback,
         } as never,
       });
     } catch (error) {
@@ -417,6 +446,26 @@ Please create the ticket using the create_ticket tool with these exact values.`;
     } finally {
       this.isProcessing = false;
     }
+  }
+
+  /**
+   * Map conversation state to fallback response key
+   */
+  private getStateKey(state: ConversationState): string {
+    const stateMap: Record<ConversationState, string> = {
+      [ConversationState.GREETING]: 'greeting',
+      [ConversationState.COLLECTING_NAME]: 'name_collection',
+      [ConversationState.COLLECTING_EMAIL]: 'email_collection',
+      [ConversationState.COLLECTING_PHONE]: 'phone_collection',
+      [ConversationState.COLLECTING_ADDRESS]: 'address_collection',
+      [ConversationState.COLLECTING_ISSUE]: 'issue_collection',
+      [ConversationState.CONFIRMING_DETAILS]: 'confirmation',
+      [ConversationState.TICKET_CREATION]: 'confirmation',
+      [ConversationState.CONFIRMATION]: 'confirmation',
+      [ConversationState.COMPLETE]: 'default',
+      [ConversationState.ERROR]: 'error',
+    };
+    return stateMap[state] || 'default';
   }
 
   /**
