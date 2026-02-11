@@ -187,7 +187,7 @@ export class VoiceAgent {
             
             // Log every 50th frame to show we're receiving audio + RMS values
             if (totalFramesReceived % 50 === 1) {
-              logger.info({ 
+              logger.debug({ 
                 totalFrames: totalFramesReceived, 
                 rms: Math.round(rms),
                 threshold: SILENCE_THRESHOLD,
