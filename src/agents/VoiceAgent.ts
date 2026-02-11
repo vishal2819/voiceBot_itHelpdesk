@@ -599,7 +599,7 @@ Please create the ticket using the create_ticket tool with these exact values.`;
       // If format is undefined, we assume PCM (for backward compatibility)
       // If format is explicitly set to non-PCM (e.g., 'wav', 'mp3'), reject it
       const format = ttsResult.metadata?.format as string | undefined;
-      if (format && format !== 'pcm') {
+      if (format && format.toLowerCase() !== 'pcm') {
         logger.error(
           { provider: ttsResult.metadata?.provider, format },
           'TTS provider returned non-PCM format. Audio track output requires PCM. Please configure a TTS provider that returns raw PCM (e.g., OpenAI, ElevenLabs).',
